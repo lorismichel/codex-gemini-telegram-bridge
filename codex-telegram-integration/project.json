@@ -1,0 +1,13 @@
+{
+  "codexArgs": [
+    "--search",
+    "--dangerously-bypass-approvals-and-sandbox"
+  ],
+  "allowAnyCommand": true,
+  "allowFirstChatRegistration": true,
+  "allowedCommands": {
+    "status": ["git", ["status", "--short"]],
+    "diff": ["git", ["diff", "--stat"]],
+    "log": ["git", ["log", "--oneline", "-5"]]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "allowAnyCommand": true,
+  "allowFirstChatRegistration": true,
+  "geminiArgs": ["--yolo"],
+  "allowedCommands": {
+    "status": ["git", ["status", "--short"]],
+    "diff": ["git", ["diff", "--stat"]],
+    "log": ["git", ["log", "--oneline", "-5"]],
+    "sessions": ["gemini", ["--list-sessions"]]
+  }
+}

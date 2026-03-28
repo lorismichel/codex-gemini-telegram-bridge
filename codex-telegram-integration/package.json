@@ -1,0 +1,10 @@
+{
+  "name": "codex-telegram-integration",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/manager.mjs",
+    "worker": "node src/project-worker.mjs"
+  }
+}

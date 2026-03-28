@@ -1,0 +1,5 @@
+local.env
+.manager.pid
+manager.log
+state.json
+logs/
