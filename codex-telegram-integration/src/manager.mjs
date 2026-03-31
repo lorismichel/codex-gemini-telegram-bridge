@@ -24,11 +24,11 @@ const worker = fork(path.join(baseDir, 'src', 'project-worker.mjs'), {
   env: { ...process.env, PROJECT_CONFIG_JSON: JSON.stringify(project) },
   stdio: ['inherit', 'inherit', 'inherit', 'ipc']
 });
-const logMessageText = process.env.LOG_MESSAGE_TEXT === 'true';
 
 let nextUpdateOffset = 0;
 let nextJobId = 1;
 const pending = new Map();
+let lastHeartbeatAt = 0;
 
 worker.on('message', (message) => {
   const resolve = pending.get(message.id);
@@ -54,11 +54,11 @@ function logIntegrationEvent(event) {
   logEvent(baseDir, { integration: 'codex-telegram-integration', ...event });
 }
 
-function redactText(text, fieldName) {
-  const value = String(text || '');
-  return logMessageText
-    ? { [fieldName]: value }
-    : { [`${fieldName}Length`]: value.length };
+function maybeLogHeartbeat() {
+  const now = Date.now();
+  if (now - lastHeartbeatAt < 60_000) return;
+  lastHeartbeatAt = now;
+  logIntegrationEvent({ type: 'heartbeat' });
 }
 
 function summarizeError(error) {
@@ -71,6 +71,11 @@ function summarizeError(error) {
   }
 
   return message;
+}
+
+function isTelegramConflictError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /Telegram API getUpdates failed with 409/i.test(message);
 }
 
 async function telegram(method, body) {
@@ -130,21 +135,18 @@ async function installTelegramCommands() {
   });
 }
 
+async function ensurePollingMode() {
+  await telegram('deleteWebhook', { drop_pending_updates: false });
+}
+
 function isAllowedMessage(message) {
   const chatId = String(message?.chat?.id || '');
   if (!chatId) return false;
   if (!allowedChatId) {
-    if (!project.allowFirstChatRegistration) {
-      logIntegrationEvent({ type: 'message_rejected', chatId, reason: 'missing_allowed_chat_id' });
-      return false;
-    }
     allowedChatId = chatId;
     persistState();
     logIntegrationEvent({ type: 'chat_registered', chatId });
     return true;
-  }
-  if (chatId !== allowedChatId) {
-    logIntegrationEvent({ type: 'message_rejected', chatId, reason: 'chat_not_allowed' });
   }
   return chatId === allowedChatId;
 }
@@ -200,13 +202,7 @@ function resolveSessionReference(chatState, rawReference) {
 
 async function runAsk(chatId, chatState, prompt) {
   const startedAt = Date.now();
-  logIntegrationEvent({
-    type: 'command_started',
-    chatId: String(chatId),
-    command: 'ask',
-    sessionId: chatState.session.current || '',
-    ...redactText(prompt, 'prompt')
-  });
+  logIntegrationEvent({ type: 'command_started', chatId: String(chatId), command: 'ask', prompt, sessionId: chatState.session.current || '' });
   const result = await withTyping(chatId, () => submitJob('ask', { prompt, sessionId: chatState.session.current || '' }));
   if (result.ok && result.sessionId) {
     rememberSession(chatState, { id: result.sessionId, updatedAt: new Date().toISOString() });
@@ -216,11 +212,11 @@ async function runAsk(chatId, chatState, prompt) {
     type: result.ok ? 'command_finished' : 'command_failed',
     chatId: String(chatId),
     command: 'ask',
+    prompt,
     sessionId: result.sessionId || chatState.session.current || '',
     durationMs: Date.now() - startedAt,
     ok: result.ok,
-    error: result.ok ? '' : result.error,
-    ...redactText(prompt, 'prompt')
+    error: result.ok ? '' : result.error
   });
   await sendText(chatId, result.ok ? result.output : `error\n${result.error}`);
 }
@@ -246,7 +242,7 @@ async function handleCommand(message) {
   const chatId = message.chat.id;
   const text = String(message.text || '').trim();
   const chatState = getChatState(chatId);
-  logIntegrationEvent({ type: 'message_received', chatId: String(chatId), ...redactText(text, 'text') });
+  logIntegrationEvent({ type: 'message_received', chatId: String(chatId), text });
 
   if (text === '/start' || text === '/help') return sendText(chatId, helpText(chatState));
   if (text === '/where') return sendText(chatId, `codex-telegram-integration\ncurrent session: ${chatState.session.current || '(none)'}`);
@@ -311,6 +307,7 @@ async function poll() {
     nextUpdateOffset = update.update_id + 1;
     if (update.message?.text) await handleCommand(update.message);
   }
+  maybeLogHeartbeat();
 }
 
 async function retryForever(label, fn, delayMs = 3000) {
@@ -318,6 +315,20 @@ async function retryForever(label, fn, delayMs = 3000) {
     try {
       return await fn();
     } catch (error) {
+      if (label === 'poll' && isTelegramConflictError(error)) {
+        const message = [
+          'Telegram getUpdates returned 409.',
+          'Another poller or an active webhook is already using this bot token.',
+          'Stop the other manager process, or run only one instance of codex-telegram-integration.'
+        ].join(' ');
+        logIntegrationEvent({
+          type: 'conflict_error',
+          label,
+          error: message
+        });
+        throw new Error(message);
+      }
+
       const summary = summarizeError(error);
       console.error(`${label} failed: ${summary}. Retrying in ${Math.round(delayMs / 1000)}s.`);
       logIntegrationEvent({
@@ -334,6 +345,7 @@ async function retryForever(label, fn, delayMs = 3000) {
 async function main() {
   const ping = await submitJob('ping', '');
   if (!ping.ok) throw new Error(ping.error);
+  await retryForever('deleteWebhook', () => ensurePollingMode());
   await retryForever('setMyCommands', () => installTelegramCommands());
   persistState();
   logIntegrationEvent({ type: 'manager_started' });
@@ -343,6 +355,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error);
+  console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });
