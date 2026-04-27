@@ -15,7 +15,15 @@ loadEnv(baseDir);
 
 const botToken = process.env.TELEGRAM_BOT_TOKEN;
 const state = loadState(baseDir);
-let allowedChatId = String(process.env.TELEGRAM_ALLOWED_CHAT_ID || state.allowedChatId || '');
+
+const allowedChatIds = new Set(
+  (process.env.TELEGRAM_ALLOWED_CHAT_IDS || process.env.TELEGRAM_ALLOWED_CHAT_ID || state.allowedChatId || '')
+    .split(',').map(s => s.trim()).filter(Boolean)
+);
+
+const mentionPattern = process.env.TELEGRAM_MENTION_PATTERN
+  ? new RegExp(process.env.TELEGRAM_MENTION_PATTERN, 'i')
+  : null;
 
 if (!botToken) throw new Error('Missing TELEGRAM_BOT_TOKEN');
 
@@ -46,7 +54,7 @@ function submitJob(type, payload) {
 }
 
 function persistState() {
-  state.allowedChatId = allowedChatId;
+  state.allowedChatId = [...allowedChatIds].join(',');
   saveState(baseDir, state);
 }
 
@@ -139,16 +147,25 @@ async function ensurePollingMode() {
   await telegram('deleteWebhook', { drop_pending_updates: false });
 }
 
+function isGroupChat(message) {
+  return (message?.chat?.type === 'group' || message?.chat?.type === 'supergroup');
+}
+
 function isAllowedMessage(message) {
   const chatId = String(message?.chat?.id || '');
   if (!chatId) return false;
-  if (!allowedChatId) {
-    allowedChatId = chatId;
+  if (allowedChatIds.size === 0) {
+    allowedChatIds.add(chatId);
     persistState();
     logIntegrationEvent({ type: 'chat_registered', chatId });
     return true;
   }
-  return chatId === allowedChatId;
+  if (!allowedChatIds.has(chatId)) return false;
+  if (isGroupChat(message) && mentionPattern) {
+    const text = String(message?.text || '');
+    if (!mentionPattern.test(text)) return false;
+  }
+  return true;
 }
 
 function getChatState(chatId) {
