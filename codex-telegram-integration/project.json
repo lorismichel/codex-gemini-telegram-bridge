@@ -1,13 +1,34 @@
 {
   "codexArgs": [
-    "--search",
-    "--dangerously-bypass-approvals-and-sandbox"
+    "--dangerously-bypass-approvals-and-sandbox",
+    "--model",
+    "gpt-5.3-codex"
   ],
   "allowAnyCommand": true,
   "allowFirstChatRegistration": true,
   "allowedCommands": {
-    "status": ["git", ["status", "--short"]],
-    "diff": ["git", ["diff", "--stat"]],
-    "log": ["git", ["log", "--oneline", "-5"]]
-  }
+    "status": [
+      "git",
+      [
+        "status",
+        "--short"
+      ]
+    ],
+    "diff": [
+      "git",
+      [
+        "diff",
+        "--stat"
+      ]
+    ],
+    "log": [
+      "git",
+      [
+        "log",
+        "--oneline",
+        "-5"
+      ]
+    ]
+  },
+  "repoPath": "/Users/lorismichel/myClaude"
 }

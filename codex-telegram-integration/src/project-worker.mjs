@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
@@ -72,15 +72,50 @@ function parseCommandLine(input) {
 }
 
 async function runExecFile(cmd, args, timeoutMs) {
-  const { stdout, stderr } = await execFileAsync(cmd, args, {
-    cwd: project.repoPath,
-    timeout: timeoutMs,
-    maxBuffer: 8 * 1024 * 1024
+  return await new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, {
+      cwd: project.repoPath,
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    let stdout = '';
+    let stderr = '';
+    let killedByTimeout = false;
+    const timer = setTimeout(() => {
+      killedByTimeout = true;
+      child.kill('SIGTERM');
+    }, timeoutMs);
+    child.stdout.on('data', (d) => {
+      stdout += d.toString('utf8');
+      if (stdout.length > 8 * 1024 * 1024) child.kill('SIGTERM');
+    });
+    child.stderr.on('data', (d) => {
+      stderr += d.toString('utf8');
+    });
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (killedByTimeout) {
+        const e = new Error('Command timed out: ' + cmd);
+        e.stdout = stdout;
+        e.stderr = stderr;
+        reject(e);
+        return;
+      }
+      if (code !== 0) {
+        const tail = stderr ? ('\n' + stderr) : '';
+        const e = new Error('Command failed: ' + cmd + ' ' + args.join(' ') + tail);
+        e.stdout = stdout;
+        e.stderr = stderr;
+        e.code = code;
+        reject(e);
+        return;
+      }
+      resolve({ stdout, stderr });
+    });
   });
-  return {
-    stdout: stdout || '',
-    stderr: stderr || ''
-  };
 }
 
 function parseCodexJsonOutput(stdout) {
