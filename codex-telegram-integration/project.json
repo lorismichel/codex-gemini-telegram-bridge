@@ -2,7 +2,7 @@
   "codexArgs": [
     "--dangerously-bypass-approvals-and-sandbox",
     "--model",
-    "gpt-5.4"
+    "gpt-5.5"
   ],
   "allowAnyCommand": true,
   "allowFirstChatRegistration": true,
