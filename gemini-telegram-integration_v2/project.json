@@ -2,7 +2,9 @@
   "allowAnyCommand": true,
   "allowFirstChatRegistration": true,
   "geminiArgs": [
-    "--yolo"
+    "--yolo",
+    "--model",
+    "gemini-2.5-flash"
   ],
   "allowedCommands": {
     "status": [
