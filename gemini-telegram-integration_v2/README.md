@@ -24,6 +24,7 @@ Gemini does not need to be running in advance.
 ```bash
 cd gemini-telegram-integration_v2
 cp local.env.example local.env
+# edit local.env and set TELEGRAM_BOT_TOKEN plus GEMINI_API_KEY
 npm run start
 ```
 
@@ -35,10 +36,30 @@ Edit `project.json` if needed.
 
 ```env
 TELEGRAM_BOT_TOKEN=xxxxxxxxxxxxxxxx
+GEMINI_API_KEY=xxxxxxxxxxxxxxxx
 ```
 
 - `TELEGRAM_ALLOWED_CHAT_ID` is optional.
 - If it is not set, the first chat that sends a message is automatically registered and stored in `state.json`.
+- `GEMINI_API_KEY` is required for individual accounts after Google disabled Gemini CLI Google OAuth access on 2026-06-18.
+- Create the key in Google AI Studio. Do not commit `local.env`.
+- Organization users with supported Code Assist or Vertex AI auth can omit `GEMINI_API_KEY` if their local `gemini` CLI is already configured for that auth path.
+
+### Gemini CLI authentication
+
+Google retired the individual "Login with Google" Gemini CLI path on 2026-06-18. If the bridge returns `IneligibleTierError`, `UNSUPPORTED_CLIENT`, or "migrate to the Antigravity suite", the local `gemini` CLI is still trying to use that retired OAuth flow.
+
+For this bridge, the simplest supported fix is to set `GEMINI_API_KEY` in `local.env`, then restart the manager:
+
+```bash
+launchctl kickstart -k gui/$(id -u)/com.gemini.agent
+```
+
+Validate the auth path with:
+
+```bash
+gemini --list-sessions
+```
 
 `project.json`
 
@@ -106,6 +127,7 @@ Use an override like this only if you want to disable unrestricted `/run` execut
 ## Security Notes
 
 - If `TELEGRAM_ALLOWED_CHAT_ID` is unset, the first chat to contact the bot becomes the allowed chat.
+- Keep `local.env` out of git because it contains the Telegram bot token and Gemini API key.
 - `/commit`, `/push`, and `/run` can change the local repository or execute local commands.
 - `allowAnyCommand` is enabled by default, so `/run` can execute arbitrary local commands unless you explicitly disable it.
 - `geminiArgs` defaults to `["--yolo"]`, which auto-approves Gemini CLI tool calls. Change that if you want a stricter runtime.

@@ -107,6 +107,14 @@ function cleanGeminiText(text) {
 function summarizeGeminiError(error) {
   const text = cleanGeminiText(error instanceof Error ? error.message : String(error));
 
+  if (/IneligibleTierError|UNSUPPORTED_CLIENT|no longer supported|Antigravity suite|Gemini Code Assist for individuals/i.test(text)) {
+    return [
+      'Gemini CLI Google OAuth is no longer supported for individual accounts.',
+      'Set GEMINI_API_KEY in gemini-telegram-integration_v2/local.env, then restart com.gemini.agent.',
+      'Validate locally with: gemini --list-sessions'
+    ].join('\n');
+  }
+
   if (/quota|QUOTA_EXHAUSTED|exhausted your capacity|TerminalQuotaError/i.test(text)) {
     const resetMatch = text.match(/reset after ([0-9a-z]+(?:[0-9a-z]+)?(?:\s*[0-9a-z]+)*)/i);
     const reset = resetMatch ? resetMatch[1].replace(/\s+/g, '') : '';
