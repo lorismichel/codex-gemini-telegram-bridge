@@ -1,8 +1,6 @@
 {
   "codexArgs": [
-    "--dangerously-bypass-approvals-and-sandbox",
-    "--model",
-    "gpt-5.5"
+    "--dangerously-bypass-approvals-and-sandbox"
   ],
   "allowAnyCommand": true,
   "allowFirstChatRegistration": true,
